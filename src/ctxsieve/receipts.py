@@ -22,3 +22,20 @@ class Receipt:
     chars_after: int
     archive_key: str | None = None
     raw: Mapping[str, object] = field(default_factory=dict)
+
+
+EvictAction = Literal["drop", "pin", "summarize"]
+
+
+@dataclass(frozen=True)
+class EvictionReceipt:
+    """One eviction decision for a unit (a message, or a tool call with its results)."""
+
+    seqs: tuple[int, ...]
+    message_ids: tuple[str | None, ...]
+    action: EvictAction
+    reason: str
+    probabilities: Mapping[str, float] | None
+    decider: str
+    policy_version: str
+    archive_keys: tuple[str, ...] = ()

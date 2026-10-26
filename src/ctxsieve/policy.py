@@ -13,8 +13,7 @@ from typing import Sequence
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
 from .archive import Archive
-from .deciders.base import Decider, Decision, Question
-from .deciders.openai_decisions import tag
+from .deciders.base import Decider, Decision, Question, tag
 from .receipts import Action, Receipt
 
 POLICY_VERSION = "0.1.0"

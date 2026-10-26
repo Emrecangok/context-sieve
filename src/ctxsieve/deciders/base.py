@@ -6,19 +6,27 @@ from typing import Any, Mapping, Protocol, Sequence
 from langchain_core.messages import BaseMessage
 
 
+def tag(index: int) -> str:
+    """Label prepended to message `index` of the state so questions can refer to it."""
+    return f"[m{index}]"
+
+
 @dataclass(frozen=True)
 class Question:
-    """A yes/no (predicate) question about the conversation state."""
+    """A predicate (yes/no) question, or a choice question when `choices` is set."""
 
     id: str
     text: str
+    choices: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
 class Decision:
     question_id: str
-    # None means the backend gave no usable answer (refusal, missing, gated); policy keeps.
-    p_yes: float | None
+    # Predicate answer. None means no usable answer (refusal, missing, gated); policy keeps.
+    p_yes: float | None = None
+    # Choice answer: label -> probability. None means no usable answer.
+    probs: Mapping[str, float] | None = None
     raw: Mapping[str, Any] = field(default_factory=dict)
 
 

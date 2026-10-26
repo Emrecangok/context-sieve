@@ -29,3 +29,29 @@ def conversations(draw) -> list[BaseMessage]:
     for i, m in enumerate(msgs):
         m.id = f"m{i}"
     return msgs
+
+
+class FakeSummarizer:
+    name = "fake-summarizer"
+
+    def __init__(self, error: Exception | None = None):
+        self.error = error
+        self.calls = []
+
+    def summarize(self, messages, previous):
+        self.calls.append(("summarize", [m.id for m in messages], list(previous)))
+        if self.error:
+            raise self.error
+        return "S(" + ",".join(str(m.id) for m in messages) + ")"
+
+    def merge(self, sections):
+        self.calls.append(("merge", list(sections)))
+        if self.error:
+            raise self.error
+        return "M(" + "+".join(sections) + ")"
+
+
+def chunks(msgs, cuts):
+    """Split `msgs` into consecutive chunks at the given (wrapped) positions."""
+    bounds = sorted({c % (len(msgs) + 1) for c in cuts} | {0, len(msgs)})
+    return [msgs[a:b] for a, b in zip(bounds, bounds[1:])]
