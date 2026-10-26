@@ -115,7 +115,7 @@ def _example():
 
 def test_actions_on_concrete_conversation():
     msgs = _example()
-    decider = FakeDecider(lambda q: {"a:verbatim": 0.05, "a:gist": 0.9, "b:verbatim": 0.05, "b:gist": 0.05}[q.id])
+    decider = FakeDecider(lambda q: {"m3:verbatim": 0.05, "m3:gist": 0.9, "m5:verbatim": 0.05, "m5:gist": 0.05}[q.id])
     archive = InMemoryArchive()
     res = prune(msgs, decider, archive, PrunePolicy(preserve_recent=2, truncate_head_chars=100))
 
@@ -139,20 +139,20 @@ def test_malformed_probabilities_keep():
 def test_decided_cache_skips_questions():
     msgs = _example()
     decider = FakeDecider(lambda q: 0.05)
-    res = prune(msgs, decider, InMemoryArchive(), PrunePolicy(preserve_recent=2), decided={"a": "keep", "b": "clear"})
+    res = prune(msgs, decider, InMemoryArchive(), PrunePolicy(preserve_recent=2), decided={"t1": "keep", "t2": "clear"})
     assert decider.calls == []
     assert [(r.action, r.reason) for r in res.receipts] == [("keep", "cached"), ("clear", "cached")]
     assert res.messages[3] == msgs[3] and res.messages[5].text.startswith("[ctxsieve: cleared")
 
     # Only undecided results are asked about; garbage cache entries are ignored.
-    res = prune(msgs, decider, InMemoryArchive(), PrunePolicy(preserve_recent=2), decided={"a": "keep", "b": "explode"})
-    assert [q.id for q in decider.calls[0]] == ["b:verbatim", "b:gist"]
+    res = prune(msgs, decider, InMemoryArchive(), PrunePolicy(preserve_recent=2), decided={"t1": "keep", "t2": "explode"})
+    assert [q.id for q in decider.calls[0]] == ["m5:verbatim", "m5:gist"]
     assert res.receipts[1].reason == "not_needed"
 
 
 def test_decider_error_still_applies_cached():
     msgs = _example()
-    res = prune(msgs, FakeDecider(error=RuntimeError("x")), InMemoryArchive(), PrunePolicy(preserve_recent=2), decided={"a": "clear"})
+    res = prune(msgs, FakeDecider(error=RuntimeError("x")), InMemoryArchive(), PrunePolicy(preserve_recent=2), decided={"t1": "clear"})
     assert res.error is not None
     assert [(r.action, r.reason) for r in res.receipts] == [("clear", "cached"), ("keep", "decider_error")]
 

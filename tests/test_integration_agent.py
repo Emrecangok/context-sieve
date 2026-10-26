@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any
 
 from langchain.agents import create_agent
@@ -86,7 +87,7 @@ def test_tool_pruning_view_mode():
     cleared = [m for m in last_input if isinstance(m, ToolMessage) and m.text.startswith("[ctxsieve: cleared")]
     kept = [m for m in last_input if isinstance(m, ToolMessage) and m.text.startswith("FACT")]
     assert len(cleared) == 2 and len(kept) == 2  # noise 1, 2 cleared; latest noise is still recent
-    asked = [q.id for c in decider.calls for q in c]
+    asked = [(re.search(r"tool call (\S+)", q.text).group(1), q.id.split(":")[1]) for c in decider.calls for q in c]
     assert len(asked) == len(set(asked))  # every result asked about once
     assert set(state[PRUNE_KEY]["decided"].values()) == {"keep", "clear"}
     for seen in model.seen:

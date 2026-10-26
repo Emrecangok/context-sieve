@@ -67,19 +67,25 @@ def candidate_indices(messages: Sequence[BaseMessage], policy: PrunePolicy) -> l
     return out
 
 
-def _qid(msg: ToolMessage, aspect: str) -> str:
-    return f"{msg.tool_call_id}:{aspect}"
+def _qid(index: int, aspect: str) -> str:
+    # By position: tool_call_ids are not guaranteed unique (some providers reuse them).
+    return f"m{index}:{aspect}"
+
+
+def cache_key(msg: BaseMessage) -> str | None:
+    """Key for a cached decision: the message id, else its tool_call_id."""
+    return msg.id or getattr(msg, "tool_call_id", None)
 
 
 def questions_for(index: int, msg: ToolMessage) -> list[Question]:
     ref = f"tool call {msg.tool_call_id} ({msg.name or 'tool'}), output message {tag(index)}"
     return [
         Question(
-            _qid(msg, "verbatim"),
+            _qid(index, "verbatim"),
             f"The full, exact output of {ref} is still needed to complete the user's current task.",
         ),
         Question(
-            _qid(msg, "gist"),
+            _qid(index, "gist"),
             f"Knowing that {ref} was made, plus a short excerpt of its output, "
             "is still useful for the user's current task.",
         ),
@@ -126,8 +132,8 @@ def prune(
 ) -> PruneResult:
     """Keep, truncate or clear older tool results.
 
-    `decided` maps tool_call_id -> action from earlier calls; those results are not asked
-    about again and their receipt has reason "cached".
+    `decided` maps cache_key(message) -> action from earlier calls; those results are not
+    asked about again and their receipt has reason "cached".
     """
     messages = list(messages)
     decided = {k: v for k, v in (decided or {}).items() if v in ("keep", "truncate", "clear")}
@@ -135,7 +141,7 @@ def prune(
     if not candidates:
         return PruneResult(messages)
 
-    ask = [i for i in candidates if messages[i].tool_call_id not in decided]
+    ask = [i for i in candidates if cache_key(messages[i]) not in decided]
     decisions: dict[str, Decision] = {}
     error = None
     if ask:
@@ -151,19 +157,25 @@ def prune(
     for i in candidates:
         msg = messages[i]
         probs: dict[str, float | None] = {}
-        if msg.tool_call_id in decided:
-            action, reason = decided[msg.tool_call_id], "cached"
+        if cache_key(msg) in decided:
+            action, reason = decided[cache_key(msg)], "cached"
         elif error is not None:
             action, reason = "keep", "decider_error"
         else:
-            probs = {aspect: _p(decisions, _qid(msg, aspect)) for aspect in ("verbatim", "gist")}
+            probs = {aspect: _p(decisions, _qid(i, aspect)) for aspect in ("verbatim", "gist")}
             action, reason = choose_action(probs["verbatim"], probs["gist"], policy)
         if action == "truncate" and len(msg.text) <= policy.truncate_head_chars:
             action, reason = "keep", "too_short_to_truncate"
         key = None
         if action != "keep":
-            key = archive.put(msg)
-            out[i] = _replace(msg, action, key, policy)
+            try:
+                key = archive.put(msg)
+            except Exception as e:  # fail-open: keep the original rather than lose it
+                log.warning("ctxsieve: archive failed, keeping tool result: %r", e)
+                error = error or repr(e)
+                action, reason = "keep", "archive_error"
+            else:
+                out[i] = _replace(msg, action, key, policy)
         receipts.append(_receipt(i, msg, action, reason, probs, decider, key, out[i]))
     return PruneResult(out, receipts, error=error)
 

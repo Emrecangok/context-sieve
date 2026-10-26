@@ -12,6 +12,7 @@ state mode the state itself already holds the pruned context.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated, Any, Awaitable, Callable
 
 from langchain.agents.middleware import AgentMiddleware, AgentState, ModelRequest, ModelResponse
@@ -32,6 +33,11 @@ class _HookMiddleware(AgentMiddleware):
 
     def before_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
         return self.hook.update(state, getattr(runtime, "store", None))
+
+    async def abefore_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
+        # The hook makes blocking decider and store calls; run it off the event loop (sync
+        # calls to async stores are allowed from a worker thread).
+        return await asyncio.to_thread(self.hook.update, state, getattr(runtime, "store", None))
 
     def _viewed(self, request: ModelRequest) -> ModelRequest:
         if self.hook.mode != "view":

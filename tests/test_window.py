@@ -20,6 +20,7 @@ from ctxsieve.region import Dropped, Pending, Pinned
 from ctxsieve.window import choose_eviction
 
 POLICY = WindowPolicy(max_messages=4)
+AUTO_PIN = {"pinned_by_user", "system_message", "first_user_message"}
 
 
 @st.composite
@@ -112,7 +113,7 @@ def test_fail_open_keeps_everything_verbatim(msgs, cut):
     assert {m.id for m in msgs} <= rendered_ids
     if w.receipts:
         assert w.errors
-        assert all(r.reason == "decider_error" and r.action == "pin" for r in w.receipts)
+        assert all(r.action == "pin" and r.reason in {"decider_error", *AUTO_PIN} for r in w.receipts)
 
 
 @given(conversations(), cuts, choice_probs())
@@ -130,7 +131,7 @@ def test_one_receipt_per_evicted_unit_and_one_call_per_add(msgs, cut, probs):
     w = SlidingWindow(decider, InMemoryArchive(), POLICY)
     evicting_adds = 0
     for chunk in chunks(msgs, cut):
-        evicting_adds += bool(w.add(chunk))
+        evicting_adds += any(r.reason not in AUTO_PIN for r in w.add(chunk))
     assert len(decider.calls) == evicting_adds  # one batched decider call per evicting add()
     assert len(w.receipts) == len(w.region)
     for r, e in zip(w.receipts, w.region):
@@ -293,7 +294,7 @@ def test_drop_leaves_pointer_and_is_recallable():
     rendered = w.render()
     assert [m.id for m in rendered[:2]] == ["s", "h0"]
     notes = [m for m in rendered if "dropped" in m.text]
-    assert len(notes) == 2
+    assert len(notes) == 1 and "2 earlier message(s) dropped" in notes[0].text  # adjacent drops merge
     [r0, r1] = w.receipts
     assert w.recall(r0.archive_keys[0]).id == "u0"
     assert [m.id for m in rendered[-2:]] == ["u2", "a3"]

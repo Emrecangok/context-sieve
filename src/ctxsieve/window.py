@@ -74,10 +74,22 @@ def is_note(m: BaseMessage) -> bool:
     return (isinstance(mark, dict) and bool(mark.get("note"))) or (m.id or "").startswith(NOTE_ID_PREFIX)
 
 
-def _note(note: Callable[[str], BaseMessage], text: str, note_id: str) -> BaseMessage:
-    # Stable ids, so a note rendered into graph state keeps its identity across turns.
+def _note(note: Callable[[str], BaseMessage], text: str, note_id: str, entry: dict[str, Any]) -> BaseMessage:
+    # Stable ids, so a note rendered into graph state keeps its identity across turns. The
+    # note also carries the region entry it stands for, so a window can be rebuilt from the
+    # messages alone (see SlidingWindow.adopt).
     msg = note(text)
-    return msg.model_copy(update={"id": note_id}) if msg.id is None else msg
+    kwargs = {**msg.additional_kwargs, MARK: {"note": True, "entry": entry}}
+    return msg.model_copy(update={"id": msg.id or note_id, "additional_kwargs": kwargs})
+
+
+MAX_KEYS_SHOWN = 5
+
+
+def _dropped_text(items: Sequence[tuple[Seq, str]]) -> str:
+    keys = [k for _, k in items]
+    shown = ", ".join(keys[:MAX_KEYS_SHOWN]) + (f", +{len(keys) - MAX_KEYS_SHOWN} more" if len(keys) > MAX_KEYS_SHOWN else "")
+    return f"[ctxsieve: {len(keys)} earlier message(s) dropped; archive {shown}]"
 
 
 class MissingMessageError(KeyError):
@@ -110,6 +122,7 @@ class SlidingWindow:
         self.errors: list[str] = []
         self._seq = 0
         self._seen_human = False
+        self._first_human_seq: int | None = None
 
     def add(self, messages: Sequence[BaseMessage]) -> list[EvictionReceipt]:
         for m in messages:
@@ -119,8 +132,15 @@ class SlidingWindow:
     def _append(self, m: BaseMessage) -> None:
         item = (self._seq, m)
         self._seq += 1
-        if isinstance(m, SystemMessage) or (isinstance(m, HumanMessage) and not self._seen_human):
-            self._seen_human |= isinstance(m, HumanMessage)
+        first_human = isinstance(m, HumanMessage) and not self._seen_human
+        if first_human:
+            self._seen_human = True
+            self._first_human_seq = item[0]
+        # Head is only the opening of the conversation, so rendering never reorders history.
+        # A later system message or a first user message after a greeting stays in place and
+        # is pinned automatically when it leaves the window.
+        at_start = not self.window and not self.region
+        if at_start and (isinstance(m, SystemMessage) or first_human):
             self.head.append(item)
         elif isinstance(m, ToolMessage) and self.window and _owns(self.window[-1], m):
             self.window[-1].append(item)
@@ -181,6 +201,10 @@ class SlidingWindow:
         for i, unit in enumerate(evicted):
             if any(m.id is not None and m.id in self.policy.pinned_ids for _, m in unit):
                 out[i] = ("pin", "pinned_by_user", None)
+            elif any(isinstance(m, SystemMessage) for _, m in unit):
+                out[i] = ("pin", "system_message", None)
+            elif any(s == self._first_human_seq for s, _ in unit):
+                out[i] = ("pin", "first_user_message", None)
         ask = [i for i in range(len(evicted)) if out[i] is None]
         if ask:
             # State = what the agent currently sees, with the evicted units back in place.
@@ -206,16 +230,26 @@ class SlidingWindow:
 
     def _render_head_region(self, note: Callable[[str], BaseMessage]) -> list[BaseMessage]:
         out = [m for _, m in self.head]
+        run: list[tuple[Seq, str]] = []  # adjacent Dropped entries render as one pointer
+
+        def flush_run() -> None:
+            if run:
+                entry = {"kind": "dropped", "items": [list(p) for p in run]}
+                out.append(_note(note, _dropped_text(run), f"{NOTE_ID_PREFIX}dropped-{run[0][0]}", entry))
+                run.clear()
+
         for e in self.region:
+            if isinstance(e, Dropped):
+                run.extend(e.items)
+                continue
+            flush_run()
             if isinstance(e, (Pinned, Pending)):
                 out.extend(m for _, m in e.items)
-            elif isinstance(e, Dropped):
-                keys = ", ".join(k for _, k in e.items)
-                text = f"[ctxsieve: {len(e.items)} earlier message(s) dropped; archive {keys}]"
-                out.append(_note(note, text, f"{NOTE_ID_PREFIX}dropped-{e.items[0][0]}"))
             else:
                 text = f"[ctxsieve: summary of {len(e.items)} earlier message(s)]\n{e.text}"
-                out.append(_note(note, text, f"{NOTE_ID_PREFIX}summary-{e.items[0][0]}-{e.level}"))
+                entry = {"kind": "summary", "text": e.text, "level": e.level, "items": [list(p) for p in e.items]}
+                out.append(_note(note, text, f"{NOTE_ID_PREFIX}summary-{e.items[0][0]}-{e.level}", entry))
+        flush_run()
         return out
 
     def render(self, note: Callable[[str], BaseMessage] = default_note) -> list[BaseMessage]:
@@ -252,6 +286,7 @@ class SlidingWindow:
             "version": STATE_VERSION,
             "seq": self._seq,
             "seen_human": self._seen_human,
+            "first_human_seq": self._first_human_seq,
             "head": _ids(self.head),
             "window": [_ids(u) for u in self.window],
             "region": region,
@@ -284,6 +319,8 @@ class SlidingWindow:
         w = cls(decider, archive, policy)
         w._seq = int(data["seq"])
         w._seen_human = bool(data["seen_human"])
+        first = data.get("first_human_seq")
+        w._first_human_seq = None if first is None else int(first)
         w.head = list(resolve(data["head"]))
         w.window = [list(resolve(u)) for u in data["window"]]
         for e in data["region"]:
@@ -298,6 +335,69 @@ class SlidingWindow:
                 w.region.append(Summary(e["text"], tuple((int(s), k) for s, k in e["items"]), int(e["level"])))
             else:
                 raise ValueError(f"unknown region entry kind: {kind!r}")
+        return w
+
+    @classmethod
+    def adopt(
+        cls,
+        messages: Sequence[BaseMessage],
+        decider: Decider,
+        archive: Archive,
+        policy: WindowPolicy = WindowPolicy(),
+    ) -> SlidingWindow:
+        """Rebuild a window from an already-pruned message list, losing nothing.
+
+        Used when stored window state is missing or unusable but the messages may already
+        contain notes (state mode). Notes become their Dropped/Summary entries again, every
+        other message older than the window is kept verbatim (pinned), and no decider call is
+        made. Rendering the result reproduces `messages` in order.
+        """
+        w = cls(decider, archive, policy)
+        units: list[tuple[str, Any]] = []  # ("note", entry) or ("unit", Unit)
+        seq = 0
+        for m in messages:
+            mark = m.additional_kwargs.get(MARK)
+            entry = mark.get("entry") if isinstance(mark, dict) else None
+            if is_note(m):
+                if isinstance(entry, dict) and entry.get("kind") in ("dropped", "summary"):
+                    items = tuple((int(s), str(k)) for s, k in entry.get("items", []))
+                    if items:
+                        seq = max(seq, max(s for s, _ in items) + 1)
+                        made: Entry = (
+                            Dropped(items) if entry["kind"] == "dropped"
+                            else Summary(str(entry.get("text", "")), items, int(entry.get("level", 0)))
+                        )
+                        units.append(("note", made))
+                        continue
+                # A note without usable metadata is kept as a plain message.
+            item = (seq, m)
+            seq += 1
+            if isinstance(m, ToolMessage) and units and units[-1][0] == "unit" and _owns(units[-1][1], m):
+                units[-1][1].append(item)
+            else:
+                units.append(("unit", [item]))
+
+        # The newest units that fit stay in the window; everything before is region.
+        size, split = 0, len(units)
+        while split > 0 and units[split - 1][0] == "unit":
+            unit_len = len(units[split - 1][1])
+            if size + unit_len > policy.max_messages and split < len(units):
+                break
+            size += unit_len
+            split -= 1
+        for kind, value in units[:split]:
+            w.region.append(value if kind == "note" else Pinned(tuple(value)))
+        w.window = [value for _, value in units[split:]]
+        w._seq = seq
+        for _, value in units:
+            if isinstance(value, list):
+                for s, m in value:
+                    if isinstance(m, HumanMessage) and not is_note(m):
+                        w._seen_human = True
+                        w._first_human_seq = s
+                        break
+            if w._seen_human:
+                break
         return w
 
     def restore_all(self) -> list[BaseMessage]:
