@@ -52,10 +52,10 @@ def choose_eviction(probs: Mapping[str, float] | None, policy: WindowPolicy) -> 
 
 
 def eviction_question(qid: str, first: int, last: int) -> Question:
-    span = f"Message {tag(first)}" if first == last else f"Messages {tag(first)} to {tag(last)}"
+    span = f"Message {tag(first)} is" if first == last else f"Messages {tag(first)} to {tag(last)} are"
     return Question(
         qid,
-        f"{span} are leaving the agent's recent-context window. Given the user's current task and "
+        f"{span} leaving the agent's recent-context window. Given the user's current task and "
         "what is likely to be needed later, choose what to keep of them. "
         "drop: not needed again. "
         "pin: contains a constraint, preference, identifier, decision or exact value that must stay verbatim. "
@@ -213,7 +213,8 @@ class SlidingWindow:
             for unit in evicted:
                 spans.append((len(state), len(state) + len(unit) - 1))
                 state.extend(m for _, m in unit)
-            state.extend(m for u in self.window for _, m in u)
+            # `evicted` is still the head of self.window (it is removed after deciding).
+            state.extend(m for u in self.window[len(evicted):] for _, m in u)
             questions = [eviction_question(f"u{i}", *spans[i]) for i in ask]
             try:
                 answers = {d.question_id: d.probs for d in self.decider.decide(state, questions)}

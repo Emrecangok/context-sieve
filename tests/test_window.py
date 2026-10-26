@@ -309,6 +309,23 @@ def test_pinned_ids_skip_the_decider():
     assert len(decider.calls) == 1 and [q.id for q in decider.calls[0]] == ["u1"]
 
 
+@given(conversations(), cuts)
+def test_decider_state_has_no_duplicates(msgs, cut):
+    # Regression: evicted units were sent twice (as evicted and again as window).
+    seen_states = []
+
+    class Spy(FakeDecider):
+        def decide(self, state, questions):
+            seen_states.append(list(state))
+            return super().decide(state, questions)
+
+    w = SlidingWindow(Spy({"drop": 0.0, "pin": 1.0, "summarize": 0.0}), InMemoryArchive(), POLICY)
+    feed(w, msgs, cut)
+    for state in seen_states:
+        ids = [m.id for m in state if m.id and not m.id.startswith("ctxsieve-note-")]
+        assert len(ids) == len(set(ids))
+
+
 def test_question_points_at_evicted_messages():
     decider = FakeDecider({"drop": 0.0, "pin": 1.0, "summarize": 0.0})
     w = SlidingWindow(decider, InMemoryArchive(), WindowPolicy(max_messages=2))
