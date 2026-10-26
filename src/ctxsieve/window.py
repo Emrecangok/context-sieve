@@ -16,7 +16,7 @@ from typing import Callable, Literal, Mapping, Sequence
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
 from .archive import Archive
-from .deciders.base import Decider, Question, tag
+from .deciders.base import Decider, Question, tag, valid_prob
 from .receipts import EvictAction, EvictionReceipt
 from .region import Dropped, Entry, Pending, Pinned, Seq, Summary
 
@@ -40,7 +40,7 @@ class WindowPolicy:
 
 
 def choose_eviction(probs: Mapping[str, float] | None, policy: WindowPolicy) -> tuple[EvictAction, str]:
-    if not probs or any(c not in probs for c in EVICT_CHOICES):
+    if not isinstance(probs, Mapping) or not all(valid_prob(probs.get(c)) for c in EVICT_CHOICES):
         return policy.fallback, "no_answer"
     if probs["drop"] >= policy.drop_min_prob:
         return "drop", "not_needed"
@@ -102,16 +102,23 @@ class SlidingWindow:
 
     def _evict(self) -> list[EvictionReceipt]:
         size = sum(len(u) for u in self.window)
-        evicted: list[Unit] = []
+        count = 0
         # The newest unit always stays, even if it alone exceeds the limit.
-        while size > self.policy.max_messages and len(self.window) > 1:
-            unit = self.window.pop(0)
-            size -= len(unit)
-            evicted.append(unit)
-        if not evicted:
+        while size > self.policy.max_messages and count < len(self.window) - 1:
+            size -= len(self.window[count])
+            count += 1
+        if not count:
             return []
 
-        decisions = self._decide(evicted)
+        # Decide before touching the window, so no failure can leave units in neither place.
+        evicted = self.window[:count]
+        try:
+            decisions = self._decide(evicted)
+        except Exception as e:
+            log.warning("ctxsieve: eviction decision failed, keeping units verbatim: %r", e)
+            self.errors.append(repr(e))
+            decisions = [(self.policy.fallback, "decider_error", None)] * count
+        del self.window[:count]
         receipts = []
         for unit, (action, reason, probs) in zip(evicted, decisions):
             keys: tuple[str, ...] = ()

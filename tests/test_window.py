@@ -174,6 +174,39 @@ def test_mixed_decisions_stay_chronological_and_restorable(msgs, cut, ans, pinne
             assert r.action == "pin"
 
 
+BAD_PROBS = [
+    {"drop": None, "pin": 0.5, "summarize": 0.5},
+    {"drop": "0.9", "pin": 0.05, "summarize": 0.05},
+    {"drop": float("nan"), "pin": 0.5, "summarize": 0.5},
+    {"drop": 1.5, "pin": 0.0, "summarize": 0.0},
+    {"drop": True, "pin": 0.0, "summarize": 0.0},
+    ["drop", "pin", "summarize"],
+]
+
+
+def test_malformed_probabilities_never_lose_messages():
+    # Review finding: a None probability crashed choose_eviction after the units had left the window.
+    for bad in BAD_PROBS:
+        w = SlidingWindow(FakeDecider(lambda q, bad=bad: bad), InMemoryArchive(), WindowPolicy(max_messages=1))
+        msgs = [HumanMessage("task", id="t"), HumanMessage("keep me", id="k"), AIMessage("a1", id="a1"), AIMessage("a2", id="a2")]
+        w.add(msgs)
+        assert w.restore_all() == msgs, bad
+        assert [r.reason for r in w.receipts] == ["no_answer", "no_answer"], bad
+        assert all(isinstance(e, Pinned) for e in w.region), bad
+
+
+def test_unexpected_decision_error_keeps_units():
+    class Exploding(FakeDecider):
+        def decide(self, state, questions):
+            return [None]  # not a Decision: breaks the caller, not the decider call
+
+    w = SlidingWindow(Exploding(), InMemoryArchive(), WindowPolicy(max_messages=1))
+    msgs = _chat(3)
+    w.add(msgs)
+    assert w.restore_all() == msgs
+    assert w.errors and all(r.reason == "decider_error" for r in w.receipts)
+
+
 def test_archive_failure_keeps_unit_verbatim():
     class BrokenArchive(InMemoryArchive):
         def put(self, message):

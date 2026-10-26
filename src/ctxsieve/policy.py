@@ -13,7 +13,7 @@ from typing import Sequence
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
 from .archive import Archive
-from .deciders.base import Decider, Decision, Question, tag
+from .deciders.base import Decider, Decision, Question, tag, valid_prob
 from .receipts import Action, Receipt
 
 POLICY_VERSION = "0.1.0"
@@ -88,7 +88,7 @@ def questions_for(index: int, msg: ToolMessage) -> list[Question]:
 
 def _p(decisions: dict[str, Decision], qid: str) -> float | None:
     d = decisions.get(qid)
-    return None if d is None else d.p_yes
+    return d.p_yes if d is not None and valid_prob(d.p_yes) else None
 
 
 def choose_action(p_verbatim: float | None, p_gist: float | None, policy: PrunePolicy) -> tuple[Action, str]:

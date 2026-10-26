@@ -89,6 +89,7 @@ def flush_pending(window: SlidingWindow, summarizer: Summarizer, policy: Summary
             section = Summary(text, tuple((s, window.archive.put(m)) for s, m in items))
         except Exception as e:
             log.warning("ctxsieve: summary flush failed, run left queued: %r", e)
+            window.errors.append(repr(e))
             continue
         replaced[run[0]] = (run, section)
         previous.append(text)
@@ -116,6 +117,7 @@ def compact_summaries(window: SlidingWindow, summarizer: Summarizer, policy: Sum
         text = summarizer.merge([s.text for s in sections])
     except Exception as e:
         log.warning("ctxsieve: summarizer %s failed to merge, sections left as is: %r", summarizer.name, e)
+        window.errors.append(repr(e))
         return None
     merged = Summary(text, tuple(p for s in sections for p in s.items), level=sections[0].level + 1)
     _replace_runs(window, {run[0]: (run, merged)})

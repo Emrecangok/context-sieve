@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Protocol, Sequence
 
 from langchain_core.messages import BaseMessage
+
+
+def valid_prob(p: Any) -> bool:
+    """A usable probability: a finite real number in [0, 1]. Anything else counts as no answer."""
+    return isinstance(p, (int, float)) and not isinstance(p, bool) and math.isfinite(p) and 0.0 <= p <= 1.0
 
 
 def tag(index: int) -> str:
