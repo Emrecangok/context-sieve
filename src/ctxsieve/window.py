@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Callable, Literal, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
@@ -21,8 +21,10 @@ from .receipts import EvictAction, EvictionReceipt
 from .region import Dropped, Entry, Pending, Pinned, Seq, Summary
 
 WINDOW_POLICY_VERSION = "0.1.0"
+STATE_VERSION = 1
 EVICT_CHOICES: tuple[EvictAction, ...] = ("drop", "pin", "summarize")
 MARK = "ctxsieve"
+NOTE_ID_PREFIX = "ctxsieve-note-"
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +66,31 @@ def eviction_question(qid: str, first: int, last: int) -> Question:
 
 def default_note(text: str) -> BaseMessage:
     return HumanMessage(text, additional_kwargs={MARK: {"note": True}})
+
+
+def is_note(m: BaseMessage) -> bool:
+    """True for pointer/summary notes rendered by a SlidingWindow."""
+    mark = m.additional_kwargs.get(MARK)
+    return (isinstance(mark, dict) and bool(mark.get("note"))) or (m.id or "").startswith(NOTE_ID_PREFIX)
+
+
+def _note(note: Callable[[str], BaseMessage], text: str, note_id: str) -> BaseMessage:
+    # Stable ids, so a note rendered into graph state keeps its identity across turns.
+    msg = note(text)
+    return msg.model_copy(update={"id": note_id}) if msg.id is None else msg
+
+
+class MissingMessageError(KeyError):
+    """A serialized window refers to a message that is no longer available."""
+
+
+def _ids(items: Sequence[tuple[Seq, BaseMessage]]) -> list[list[Any]]:
+    out = []
+    for s, m in items:
+        if not m.id:
+            raise ValueError("SlidingWindow.to_state needs every message to have an id")
+        out.append([s, m.id])
+    return out
 
 
 def _owns(unit: Unit, msg: ToolMessage) -> bool:
@@ -184,9 +211,11 @@ class SlidingWindow:
                 out.extend(m for _, m in e.items)
             elif isinstance(e, Dropped):
                 keys = ", ".join(k for _, k in e.items)
-                out.append(note(f"[ctxsieve: {len(e.items)} earlier message(s) dropped; archive {keys}]"))
+                text = f"[ctxsieve: {len(e.items)} earlier message(s) dropped; archive {keys}]"
+                out.append(_note(note, text, f"{NOTE_ID_PREFIX}dropped-{e.items[0][0]}"))
             else:
-                out.append(note(f"[ctxsieve: summary of {len(e.items)} earlier message(s)]\n{e.text}"))
+                text = f"[ctxsieve: summary of {len(e.items)} earlier message(s)]\n{e.text}"
+                out.append(_note(note, text, f"{NOTE_ID_PREFIX}summary-{e.items[0][0]}-{e.level}"))
         return out
 
     def render(self, note: Callable[[str], BaseMessage] = default_note) -> list[BaseMessage]:
@@ -195,6 +224,81 @@ class SlidingWindow:
 
     def recall(self, key: str) -> BaseMessage:
         return self.archive.get(key)
+
+    def known_ids(self) -> set[str]:
+        """Ids of every message this window has consumed (archive keys included)."""
+        ids = {m.id for _, m in self.head if m.id}
+        ids.update(m.id for u in self.window for _, m in u if m.id)
+        for e in self.region:
+            if isinstance(e, (Pinned, Pending)):
+                ids.update(m.id for _, m in e.items if m.id)
+            else:
+                ids.update(k for _, k in e.items)
+        return ids
+
+    def to_state(self) -> dict[str, Any]:
+        """JSON-serializable state. Messages are stored by id, not copied."""
+        region: list[dict[str, Any]] = []
+        for e in self.region:
+            if isinstance(e, Pinned):
+                region.append({"kind": "pinned", "items": _ids(e.items)})
+            elif isinstance(e, Pending):
+                region.append({"kind": "pending", "items": _ids(e.items)})
+            elif isinstance(e, Dropped):
+                region.append({"kind": "dropped", "items": [list(p) for p in e.items]})
+            else:
+                region.append({"kind": "summary", "text": e.text, "level": e.level, "items": [list(p) for p in e.items]})
+        return {
+            "version": STATE_VERSION,
+            "seq": self._seq,
+            "seen_human": self._seen_human,
+            "head": _ids(self.head),
+            "window": [_ids(u) for u in self.window],
+            "region": region,
+        }
+
+    @classmethod
+    def from_state(
+        cls,
+        data: Mapping[str, Any],
+        messages: Sequence[BaseMessage],
+        decider: Decider,
+        archive: Archive,
+        policy: WindowPolicy = WindowPolicy(),
+    ) -> SlidingWindow:
+        """Rebuild a window from `to_state()` output, resolving ids against `messages`.
+
+        Raises MissingMessageError if a head, window, pinned or queued message is not in
+        `messages` (e.g. another component rewrote the history).
+        """
+        if data.get("version") != STATE_VERSION:
+            raise ValueError(f"unsupported ctxsieve window state version: {data.get('version')!r}")
+        by_id = {m.id: m for m in messages if m.id}
+
+        def resolve(items: Sequence[Sequence[Any]]) -> tuple[tuple[Seq, BaseMessage], ...]:
+            try:
+                return tuple((int(s), by_id[i]) for s, i in items)
+            except KeyError as e:
+                raise MissingMessageError(e.args[0]) from None
+
+        w = cls(decider, archive, policy)
+        w._seq = int(data["seq"])
+        w._seen_human = bool(data["seen_human"])
+        w.head = list(resolve(data["head"]))
+        w.window = [list(resolve(u)) for u in data["window"]]
+        for e in data["region"]:
+            kind = e["kind"]
+            if kind == "pinned":
+                w.region.append(Pinned(resolve(e["items"])))
+            elif kind == "pending":
+                w.region.append(Pending(resolve(e["items"])))
+            elif kind == "dropped":
+                w.region.append(Dropped(tuple((int(s), k) for s, k in e["items"])))
+            elif kind == "summary":
+                w.region.append(Summary(e["text"], tuple((int(s), k) for s, k in e["items"]), int(e["level"])))
+            else:
+                raise ValueError(f"unknown region entry kind: {kind!r}")
+        return w
 
     def restore_all(self) -> list[BaseMessage]:
         """Every message ever added, in its original order."""

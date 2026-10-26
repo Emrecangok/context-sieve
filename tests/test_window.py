@@ -221,6 +221,54 @@ def test_archive_failure_keeps_unit_verbatim():
     assert w.errors
 
 
+@given(conversations(), cuts, answers, st.integers(1, 4))
+def test_state_round_trip(msgs, cut, ans, flush_at):
+    import json
+
+    from ctxsieve.archive import MessageIdArchive
+
+    it = itertools.cycle(ans)
+    decider = FakeDecider(lambda q: next(it))
+    archive = MessageIdArchive(msgs)
+    w = SlidingWindow(decider, archive, POLICY)
+    s = FakeSummarizer()
+    for chunk in chunks(msgs, cut):
+        w.add(chunk)
+        flush_pending(w, s, SummaryPolicy(flush_at=flush_at))
+
+    data = json.loads(json.dumps(w.to_state()))
+    w2 = SlidingWindow.from_state(data, msgs, decider, archive, POLICY)
+    assert w2.region == w.region
+    assert w2.window == w.window and w2.head == w.head
+    assert w2.render() == w.render()
+    assert w2.restore_all() == w.restore_all() == msgs
+    assert w2.to_state() == w.to_state()
+
+
+def test_from_state_reports_missing_messages():
+    import pytest
+
+    from ctxsieve.archive import MessageIdArchive
+    from ctxsieve.window import MissingMessageError
+
+    msgs = _chat(4)
+    w = SlidingWindow(FakeDecider({"drop": 0.0, "pin": 1.0, "summarize": 0.0}), MessageIdArchive(msgs), WindowPolicy(max_messages=2))
+    w.add(msgs)
+    with pytest.raises(MissingMessageError):
+        SlidingWindow.from_state(w.to_state(), msgs[:3], FakeDecider(), MessageIdArchive(msgs))
+    with pytest.raises(ValueError):
+        SlidingWindow.from_state({**w.to_state(), "version": 99}, msgs, FakeDecider(), MessageIdArchive(msgs))
+
+
+def test_to_state_needs_ids():
+    import pytest
+
+    w = SlidingWindow(FakeDecider(), InMemoryArchive(), WindowPolicy(max_messages=5))
+    w.add([HumanMessage("no id")])
+    with pytest.raises(ValueError):
+        w.to_state()
+
+
 def test_choose_eviction_table():
     pol = WindowPolicy(drop_min_prob=0.8, fallback="pin")
     assert choose_eviction({"drop": 0.9, "pin": 0.05, "summarize": 0.05}, pol) == ("drop", "not_needed")

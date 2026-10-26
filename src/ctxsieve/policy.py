@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
@@ -113,31 +113,51 @@ def _replace(msg: ToolMessage, action: Action, key: str, policy: PrunePolicy) ->
     return msg.model_copy(update={"content": body, "additional_kwargs": kwargs})
 
 
+# Reasons that reflect a real answer and may be reused instead of asking again.
+CACHEABLE_REASONS = frozenset({"may_need_verbatim", "gist_only", "not_needed", "too_short_to_truncate"})
+
+
 def prune(
     messages: Sequence[BaseMessage],
     decider: Decider,
     archive: Archive,
     policy: PrunePolicy = PrunePolicy(),
+    decided: Mapping[str, Action] | None = None,
 ) -> PruneResult:
+    """Keep, truncate or clear older tool results.
+
+    `decided` maps tool_call_id -> action from earlier calls; those results are not asked
+    about again and their receipt has reason "cached".
+    """
     messages = list(messages)
+    decided = {k: v for k, v in (decided or {}).items() if v in ("keep", "truncate", "clear")}
     candidates = candidate_indices(messages, policy)
     if not candidates:
         return PruneResult(messages)
 
-    questions = [q for i in candidates for q in questions_for(i, messages[i])]
-    try:
-        decisions = {d.question_id: d for d in decider.decide(messages, questions)}
-    except Exception as e:  # fail-open: never prune on decider failure
-        log.warning("ctxsieve: decider %s failed, leaving messages untouched: %r", decider.name, e)
-        receipts = [_receipt(i, messages[i], "keep", "decider_error", {}, decider, None, messages[i]) for i in candidates]
-        return PruneResult(messages, receipts, error=repr(e))
+    ask = [i for i in candidates if messages[i].tool_call_id not in decided]
+    decisions: dict[str, Decision] = {}
+    error = None
+    if ask:
+        questions = [q for i in ask for q in questions_for(i, messages[i])]
+        try:
+            decisions = {d.question_id: d for d in decider.decide(messages, questions)}
+        except Exception as e:  # fail-open: never prune on decider failure
+            log.warning("ctxsieve: decider %s failed, leaving messages untouched: %r", decider.name, e)
+            error = repr(e)
 
     out = list(messages)
     receipts = []
     for i in candidates:
         msg = messages[i]
-        probs = {aspect: _p(decisions, _qid(msg, aspect)) for aspect in ("verbatim", "gist")}
-        action, reason = choose_action(probs["verbatim"], probs["gist"], policy)
+        probs: dict[str, float | None] = {}
+        if msg.tool_call_id in decided:
+            action, reason = decided[msg.tool_call_id], "cached"
+        elif error is not None:
+            action, reason = "keep", "decider_error"
+        else:
+            probs = {aspect: _p(decisions, _qid(msg, aspect)) for aspect in ("verbatim", "gist")}
+            action, reason = choose_action(probs["verbatim"], probs["gist"], policy)
         if action == "truncate" and len(msg.text) <= policy.truncate_head_chars:
             action, reason = "keep", "too_short_to_truncate"
         key = None
@@ -145,7 +165,7 @@ def prune(
             key = archive.put(msg)
             out[i] = _replace(msg, action, key, policy)
         receipts.append(_receipt(i, msg, action, reason, probs, decider, key, out[i]))
-    return PruneResult(out, receipts)
+    return PruneResult(out, receipts, error=error)
 
 
 def _receipt(

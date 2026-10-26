@@ -136,6 +136,27 @@ def test_malformed_probabilities_keep():
         assert all(r.action == "keep" for r in res.receipts), bad
 
 
+def test_decided_cache_skips_questions():
+    msgs = _example()
+    decider = FakeDecider(lambda q: 0.05)
+    res = prune(msgs, decider, InMemoryArchive(), PrunePolicy(preserve_recent=2), decided={"a": "keep", "b": "clear"})
+    assert decider.calls == []
+    assert [(r.action, r.reason) for r in res.receipts] == [("keep", "cached"), ("clear", "cached")]
+    assert res.messages[3] == msgs[3] and res.messages[5].text.startswith("[ctxsieve: cleared")
+
+    # Only undecided results are asked about; garbage cache entries are ignored.
+    res = prune(msgs, decider, InMemoryArchive(), PrunePolicy(preserve_recent=2), decided={"a": "keep", "b": "explode"})
+    assert [q.id for q in decider.calls[0]] == ["b:verbatim", "b:gist"]
+    assert res.receipts[1].reason == "not_needed"
+
+
+def test_decider_error_still_applies_cached():
+    msgs = _example()
+    res = prune(msgs, FakeDecider(error=RuntimeError("x")), InMemoryArchive(), PrunePolicy(preserve_recent=2), decided={"a": "clear"})
+    assert res.error is not None
+    assert [(r.action, r.reason) for r in res.receipts] == [("clear", "cached"), ("keep", "decider_error")]
+
+
 def test_no_candidates_means_no_decider_call():
     decider = FakeDecider()
     msgs = [HumanMessage("hi", id="h"), AIMessage("hello", id="a")]
