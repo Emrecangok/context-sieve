@@ -128,6 +128,14 @@ def test_actions_on_concrete_conversation():
     assert restore(res.messages, archive) == msgs
 
 
+def test_malformed_probabilities_keep():
+    for bad in (None, "0.1", float("nan"), -0.5, 2.0, True):
+        msgs = _example()
+        res = prune(msgs, FakeDecider(lambda q, bad=bad: bad), InMemoryArchive(), PrunePolicy(preserve_recent=2))
+        assert res.messages == msgs, bad
+        assert all(r.action == "keep" for r in res.receipts), bad
+
+
 def test_no_candidates_means_no_decider_call():
     decider = FakeDecider()
     msgs = [HumanMessage("hi", id="h"), AIMessage("hello", id="a")]
