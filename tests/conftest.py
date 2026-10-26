@@ -51,6 +51,36 @@ class FakeSummarizer:
         return "M(" + "+".join(sections) + ")"
 
 
+class ContentDecider:
+    """Answers from the text of the tagged messages, so tests can steer decisions.
+
+    Choice (eviction): PIN -> pin, DROP -> drop, otherwise summarize.
+    Predicate (tool pruning): NOISE -> 0.0 (not needed), otherwise 0.9.
+    """
+
+    name = "content"
+
+    def __init__(self):
+        self.calls = []
+
+    def decide(self, state, questions):
+        import re
+
+        from ctxsieve.deciders.base import Decision
+
+        self.calls.append(list(questions))
+        out = []
+        for q in questions:
+            tags = [int(t) for t in re.findall(r"\[m(\d+)\]", q.text)]
+            text = " ".join(state[i].text for i in range(min(tags), max(tags) + 1))
+            if q.choices:
+                label = "pin" if "PIN" in text else "drop" if "DROP" in text else "summarize"
+                out.append(Decision(q.id, probs={c: 0.9 if c == label else 0.05 for c in q.choices}))
+            else:
+                out.append(Decision(q.id, p_yes=0.0 if "NOISE" in text else 0.9))
+        return out
+
+
 def chunks(msgs, cuts):
     """Split `msgs` into consecutive chunks at the given (wrapped) positions."""
     bounds = sorted({c % (len(msgs) + 1) for c in cuts} | {0, len(msgs)})
