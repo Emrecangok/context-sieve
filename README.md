@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/LangGraph-hooks%20%26%20middleware-1C3C3C?logo=langchain&logoColor=white" alt="LangGraph">
   <img src="https://img.shields.io/badge/OpenAI-Decisions%20API%20%C2%B7%20gpt--6--luna-412991?logo=openai&logoColor=white" alt="OpenAI Decisions API">
-  <img src="https://img.shields.io/badge/license-MIT-00854A" alt="MIT license">
+  <img src="https://img.shields.io/badge/license-MIT-0E7490" alt="MIT license">
   <img src="https://img.shields.io/badge/status-experimental-F5B342" alt="Experimental">
 </p>
 
