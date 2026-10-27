@@ -2,38 +2,38 @@
   <title>context-sieve: decide what stays in your agent's context</title>
   <defs>
     <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
-      <path d="M32 0H0V32" fill="none" stroke="#0F2427" stroke-width="1"/>
+      <path d="M32 0H0V32" fill="none" stroke="#271313" stroke-width="1"/>
     </pattern>
     <radialGradient id="glowLogo" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#14B8A6" stop-opacity="0.45"/>
-      <stop offset="1" stop-color="#14B8A6" stop-opacity="0"/>
+      <stop offset="0" stop-color="#DC2626" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#DC2626" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="glowGraph" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#0F766E" stop-opacity="0.35"/>
-      <stop offset="1" stop-color="#0F766E" stop-opacity="0"/>
+      <stop offset="0" stop-color="#7F1D1D" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#7F1D1D" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="logoFill" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#5EEAD4"/>
-      <stop offset="1" stop-color="#0E7490"/>
+      <stop offset="0" stop-color="#F87171"/>
+      <stop offset="1" stop-color="#991B1B"/>
     </linearGradient>
     <clipPath id="card"><rect width="1200" height="420" rx="24"/></clipPath>
     <style>
       .sans { font-family: "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif; }
       .mono { font-family: Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace; }
-      .flow { fill: none; stroke: #2DD4BF; stroke-width: 1.6; stroke-dasharray: 5 6; stroke-opacity: .85;
+      .flow { fill: none; stroke: #F05252; stroke-width: 1.6; stroke-dasharray: 5 6; stroke-opacity: .85;
               animation: dash 1.1s linear infinite; }
       .flow-amber { fill: none; stroke: #F5B342; stroke-width: 1.6; stroke-dasharray: 5 6; stroke-opacity: .85;
               animation: dash 1.3s linear infinite; }
-      .flow-grey { fill: none; stroke: #789998; stroke-width: 1.6; stroke-dasharray: 5 6; stroke-opacity: .85;
+      .flow-grey { fill: none; stroke: #9C8585; stroke-width: 1.6; stroke-dasharray: 5 6; stroke-opacity: .85;
               animation: dash 1.5s linear infinite; }
-      .node { fill: #0A1A1C; stroke: #21393C; stroke-width: 1.2; }
-      .node-hl { fill: #0A1A1C; stroke: #2DD4BF; stroke-width: 1.4; }
-      .chip { fill: #0D1F22; stroke: #21393C; stroke-width: 1; }
-      .chip-out { fill: #0D1F22; stroke: #F5B342; stroke-width: 1.2; stroke-dasharray: 4 3; }
-      .n-title { fill: #E4F5F4; font-size: 14px; font-weight: 600; }
-      .n-sub { fill: #2DD4BF; font-size: 12px; }
-      .n-sub-muted { fill: #789998; font-size: 12px; }
-      .chip-t { fill: #C3DADA; font-size: 12px; }
+      .node { fill: #190B0B; stroke: #3D2323; stroke-width: 1.2; }
+      .node-hl { fill: #190B0B; stroke: #F05252; stroke-width: 1.4; }
+      .chip { fill: #1E0E0E; stroke: #3D2323; stroke-width: 1; }
+      .chip-out { fill: #1E0E0E; stroke: #F5B342; stroke-width: 1.2; stroke-dasharray: 4 3; }
+      .n-title { fill: #F7EAEA; font-size: 14px; font-weight: 600; }
+      .n-sub { fill: #F05252; font-size: 12px; }
+      .n-sub-muted { fill: #9C8585; font-size: 12px; }
+      .chip-t { fill: #DCCACA; font-size: 12px; }
       .pulse { animation: pulse 2s ease-in-out infinite; }
       .leave { animation: leave 3.2s ease-in-out infinite; }
       @keyframes dash { to { stroke-dashoffset: -22; } }
@@ -45,7 +45,7 @@
 
   <g clip-path="url(#card)">
     <!-- background -->
-    <rect width="1200" height="420" fill="#061214"/>
+    <rect width="1200" height="420" fill="#110707"/>
     <rect width="1200" height="420" fill="url(#grid)" opacity=".7"/>
     <circle cx="110" cy="110" r="150" fill="url(#glowLogo)"/>
     <circle cx="860" cy="220" r="300" fill="url(#glowGraph)"/>
@@ -53,20 +53,20 @@
     <!-- logo: a sieve -->
     <g transform="translate(70 70)">
       <rect width="80" height="80" rx="20" fill="url(#logoFill)"/>
-      <g fill="#061214" opacity=".85">
+      <g fill="#110707" opacity=".85">
         <circle cx="22" cy="24" r="5"/><circle cx="40" cy="24" r="5"/><circle cx="58" cy="24" r="5"/>
         <circle cx="31" cy="40" r="5"/><circle cx="49" cy="40" r="5"/>
         <circle cx="40" cy="56" r="5"/>
       </g>
-      <circle cx="40" cy="68" r="3" fill="#EFFAF9" class="pulse"/>
+      <circle cx="40" cy="68" r="3" fill="#FFF5F5" class="pulse"/>
     </g>
 
     <!-- title -->
-    <text x="70" y="215" class="sans" font-size="56" font-weight="700" fill="#EFFAF9">context-sieve</text>
-    <text x="72" y="258" class="sans" font-size="22" fill="#89A9A8">Decide what stays in your agent's context,</text>
-    <text x="72" y="288" class="sans" font-size="22" fill="#89A9A8">one message at a time.</text>
-    <text x="72" y="340" class="mono" font-size="15" fill="#2DD4BF">LangGraph hooks · create_agent middleware</text>
-    <text x="72" y="366" class="mono" font-size="15" fill="#789998">OpenAI Decisions API · view &amp; state modes · fail-open</text>
+    <text x="70" y="215" class="sans" font-size="56" font-weight="700" fill="#FFF5F5">context-sieve</text>
+    <text x="72" y="258" class="sans" font-size="22" fill="#B39696">Decide what stays in your agent's context,</text>
+    <text x="72" y="288" class="sans" font-size="22" fill="#B39696">one message at a time.</text>
+    <text x="72" y="340" class="mono" font-size="15" fill="#F05252">LangGraph hooks · create_agent middleware</text>
+    <text x="72" y="366" class="mono" font-size="15" fill="#9C8585">OpenAI Decisions API · view &amp; state modes · fail-open</text>
 
     <!-- recent window -->
     <rect x="780" y="44" width="380" height="104" rx="14" class="node-hl"/>
@@ -91,7 +91,7 @@
     <!-- to the decider -->
     <path class="flow" d="M690 134 C690 160 690 168 690 186"/>
     <rect x="600" y="188" width="180" height="58" rx="12" class="node-hl"/>
-    <circle cx="616" cy="204" r="4" fill="#2DD4BF" class="pulse"/>
+    <circle cx="616" cy="204" r="4" fill="#F05252" class="pulse"/>
     <text x="628" y="209" class="sans n-title">decider</text>
     <text x="616" y="232" class="mono n-sub">drop · pin · summarize</text>
 

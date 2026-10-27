@@ -2,33 +2,33 @@
   <title>How context-sieve works: sliding window eviction and tool-result pruning</title>
   <defs>
     <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
-      <path d="M32 0H0V32" fill="none" stroke="#0F2427" stroke-width="1"/>
+      <path d="M32 0H0V32" fill="none" stroke="#271313" stroke-width="1"/>
     </pattern>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0L10 5L0 10z" fill="#2DD4BF"/>
+      <path d="M0 0L10 5L0 10z" fill="#F05252"/>
     </marker>
     <marker id="arrowAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0L10 5L0 10z" fill="#F5B342"/>
     </marker>
     <marker id="arrowGrey" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0L10 5L0 10z" fill="#789998"/>
+      <path d="M0 0L10 5L0 10z" fill="#9C8585"/>
     </marker>
     <clipPath id="card"><rect width="1200" height="560" rx="24"/></clipPath>
     <style>
       .sans { font-family: "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif; }
       .mono { font-family: Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace; }
-      .flow { fill: none; stroke: #2DD4BF; stroke-width: 1.6; stroke-dasharray: 5 6; animation: dash 1.1s linear infinite; }
+      .flow { fill: none; stroke: #F05252; stroke-width: 1.6; stroke-dasharray: 5 6; animation: dash 1.1s linear infinite; }
       .flow-amber { fill: none; stroke: #F5B342; stroke-width: 1.6; stroke-dasharray: 5 6; animation: dash 1.3s linear infinite; }
-      .flow-grey { fill: none; stroke: #789998; stroke-width: 1.6; stroke-dasharray: 5 6; animation: dash 1.5s linear infinite; }
-      .lane { fill: #081719; stroke: #173033; stroke-width: 1; }
-      .node { fill: #0A1A1C; stroke: #21393C; stroke-width: 1.2; }
-      .node-hl { fill: #0A1A1C; stroke: #2DD4BF; stroke-width: 1.4; }
-      .lane-t { fill: #2DD4BF; font-size: 13px; font-weight: 600; letter-spacing: .08em; }
-      .n-title { fill: #E4F5F4; font-size: 15px; font-weight: 600; }
-      .n-sub { fill: #89A9A8; font-size: 12px; }
-      .n-hl { fill: #2DD4BF; font-size: 12px; }
+      .flow-grey { fill: none; stroke: #9C8585; stroke-width: 1.6; stroke-dasharray: 5 6; animation: dash 1.5s linear infinite; }
+      .lane { fill: #150909; stroke: #331A1A; stroke-width: 1; }
+      .node { fill: #190B0B; stroke: #3D2323; stroke-width: 1.2; }
+      .node-hl { fill: #190B0B; stroke: #F05252; stroke-width: 1.4; }
+      .lane-t { fill: #F05252; font-size: 13px; font-weight: 600; letter-spacing: .08em; }
+      .n-title { fill: #F7EAEA; font-size: 15px; font-weight: 600; }
+      .n-sub { fill: #B39696; font-size: 12px; }
+      .n-hl { fill: #F05252; font-size: 12px; }
       .n-amber { fill: #F5B342; font-size: 12px; }
-      .n-grey { fill: #789998; font-size: 12px; }
+      .n-grey { fill: #9C8585; font-size: 12px; }
       .pulse { animation: pulse 2s ease-in-out infinite; }
       @keyframes dash { to { stroke-dashoffset: -22; } }
       @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
@@ -37,7 +37,7 @@
   </defs>
 
   <g clip-path="url(#card)">
-    <rect width="1200" height="560" fill="#061214"/>
+    <rect width="1200" height="560" fill="#110707"/>
     <rect width="1200" height="560" fill="url(#grid)" opacity=".7"/>
 
     <!-- lane 1: sliding window -->
@@ -61,7 +61,7 @@
     <path class="flow" d="M512 148 H556" marker-end="url(#arrow)"/>
 
     <rect x="560" y="80" width="220" height="136" rx="12" class="node-hl"/>
-    <circle cx="578" cy="103" r="4" fill="#2DD4BF" class="pulse"/>
+    <circle cx="578" cy="103" r="4" fill="#F05252" class="pulse"/>
     <text x="590" y="108" class="sans n-title">decider (1 call / batch)</text>
     <text x="576" y="132" class="sans n-sub">one choice question per</text>
     <text x="576" y="150" class="sans n-sub">unit leaving the window</text>
@@ -96,7 +96,7 @@
     <path class="flow" d="M250 382 H296" marker-end="url(#arrow)"/>
 
     <rect x="300" y="322" width="480" height="120" rx="12" class="node-hl"/>
-    <circle cx="318" cy="345" r="4" fill="#2DD4BF" class="pulse"/>
+    <circle cx="318" cy="345" r="4" fill="#F05252" class="pulse"/>
     <text x="330" y="350" class="sans n-title">decider: two yes/no questions</text>
     <text x="316" y="378" class="mono n-sub">1. full output still needed?</text>
     <text x="316" y="398" class="mono n-sub">2. a short excerpt still useful?</text>
@@ -120,6 +120,6 @@
 
     <!-- guarantees -->
     <rect x="24" y="488" width="1152" height="48" rx="12" class="node"/>
-    <text x="48" y="517" class="sans n-sub"><tspan fill="#2DD4BF">fail-open</tspan>: any error keeps text verbatim   ·   <tspan fill="#2DD4BF">reversible</tspan>: everything removed can be restored   ·   <tspan fill="#2DD4BF">audited</tspan>: every decision writes a receipt</text>
+    <text x="48" y="517" class="sans n-sub"><tspan fill="#F05252">fail-open</tspan>: any error keeps text verbatim   ·   <tspan fill="#F05252">reversible</tspan>: everything removed can be restored   ·   <tspan fill="#F05252">audited</tspan>: every decision writes a receipt</text>
   </g>
 </svg>
