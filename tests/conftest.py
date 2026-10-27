@@ -54,13 +54,14 @@ class FakeSummarizer:
 class ContentDecider:
     """Answers from the text of the tagged messages, so tests can steer decisions.
 
-    Choice (eviction): PIN -> pin, DROP -> drop, otherwise summarize.
+    Choice (eviction): PIN -> pin, DROP -> drop, otherwise `default_choice` (summarize).
     Predicate (tool pruning): NOISE -> 0.0 (not needed), otherwise 0.9.
     """
 
     name = "content"
 
-    def __init__(self):
+    def __init__(self, default_choice="summarize"):
+        self.default_choice = default_choice
         self.calls = []
 
     def decide(self, state, questions):
@@ -74,7 +75,7 @@ class ContentDecider:
             tags = [int(t) for t in re.findall(r"\[m(\d+)\]", q.text)]
             text = " ".join(state[i].text for i in range(min(tags), max(tags) + 1))
             if q.choices:
-                label = "pin" if "PIN" in text else "drop" if "DROP" in text else "summarize"
+                label = "pin" if "PIN" in text else "drop" if "DROP" in text else self.default_choice
                 out.append(Decision(q.id, probs={c: 0.9 if c == label else 0.05 for c in q.choices}))
             else:
                 out.append(Decision(q.id, p_yes=0.0 if "NOISE" in text else 0.9))
