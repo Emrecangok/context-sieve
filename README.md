@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.svg" alt="context-sieve: decide what stays in your agent's context" width="100%">
+  <img src="docs/assets/hero.svg" alt="context-sieve: decide what stays in your agent's context" width="100%">
 </p>
 
 <h3 align="center">Built by Emrecan Gök</h3>
@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/LangGraph-hooks%20%26%20middleware-1C3C3C?logo=langchain&logoColor=white" alt="LangGraph">
   <img src="https://img.shields.io/badge/OpenAI-Decisions%20API%20%C2%B7%20gpt--6--luna-412991?logo=openai&logoColor=white" alt="OpenAI Decisions API">
-  <img src="https://img.shields.io/badge/license-MIT-0E7490" alt="MIT license">
+  <img src="https://img.shields.io/badge/license-MIT-B91C1C" alt="MIT license">
   <img src="https://img.shields.io/badge/status-experimental-F5B342" alt="Experimental">
 </p>
 
@@ -33,7 +33,7 @@ The goal is an honest answer to one question: **when does relevance-based prunin
 ## How it works
 
 <p align="center">
-  <img src="docs/assets/flow.svg" alt="Sliding window: new messages, recent window, decider, then pin, summarize or drop. Tool-result pruning: older tool result, two yes/no questions, then keep, truncate or clear." width="100%">
+  <img src="docs/assets/how-it-works.svg" alt="Sliding window: new messages, recent window, decider, then pin, summarize or drop. Tool-result pruning: older tool result, two yes/no questions, then keep, truncate or clear." width="100%">
 </p>
 
 | Piece | What it does |
